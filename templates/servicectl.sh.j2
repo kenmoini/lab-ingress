@@ -1,0 +1,91 @@
+#!/bin/bash
+
+set -x
+
+###################################################################################
+# VARIABLES
+###################################################################################
+
+POD_NAME="{{ service.name }}"
+NETWORK_NAME="{{ service.network.name }}"
+{% if service.network.ip is defined %}
+IP_ADDRESS="--ip {{ service.network.ip }}"
+{% endif %}
+{% if service.network.ports is defined %}
+CONTAINER_PORTS="{% for port in service.network.ports %}-p {{ port }} {% endfor %}"
+{% endif %}
+
+RESOURCE_LIMITS="-m {{ service.resources.limits.memory | default('2048m') }}"
+
+HAPROXY_CONTAINER_IMAGE="{{ haproxy_image | default('1024m') }}"
+NGINX_CONTAINER_IMAGE="{{ nginx_image | default('1024m') }}"
+
+POD_VOLUME_ROOT="{{ service_containers_dir }}/${POD_NAME}"
+
+HAPROXY_VOLUME_MOUNTS="-v ${POD_VOLUME_ROOT}/haproxy:/usr/local/etc/haproxy:ro -v ${POD_VOLUME_ROOT}/certs:/usr/local/etc/certs:ro"
+NGINX_VOLUME_MOUNTS="-v ${POD_VOLUME_ROOT}/webroot:/usr/share/nginx/html -v ${POD_VOLUME_ROOT}/nginx-templates:/etc/nginx/templates"
+
+
+###################################################################################
+# EXECUTION PREFLIGHT
+###################################################################################
+
+## Ensure there is an action arguement
+if [ -z "$1" ]; then
+  echo "Need action arguement of 'start', 'restart', or 'stop'!"
+  echo "${0} start|stop|restart"
+  exit 1
+fi
+
+
+################################################################################### SERVICE ACTION SWITCH
+case $1 in
+
+  ################################################################################# RESTART/STOP SERVICE
+  "restart" | "stop" | "start")
+    echo "Stopping pod services if running..."
+
+    echo "Killing ${POD_NAME} pod..."
+    /usr/bin/podman pod kill ${POD_NAME}
+
+    echo "Removing ${POD_NAME} pod..."
+    /usr/bin/podman pod rm -f -i ${POD_NAME}
+    ;;
+
+esac
+
+case $1 in
+
+  ################################################################################# RESTART/START SERVICE
+  "restart" | "start")
+    sleep 3
+
+    echo "Checking for stale network lock file..."
+    FILE_CHECK="/var/lib/cni/networks/${NETWORK_NAME}/${IP_ADDRESS}"
+    if [[ -f "$FILE_CHECK" ]]; then
+        rm -f $FILE_CHECK
+    fi
+
+    ## Check for seeded default certificate
+    if [[ ! -f ${POD_VOLUME_ROOT}/certs/default.pem ]]; then
+      sh ${POD_VOLUME_ROOT}/scripts/seed-cert.sh
+    fi
+
+    echo "Starting pod services..."
+    podman pod create --name "${POD_NAME}" --network "${NETWORK_NAME}" "${IP_ADDRESS}" ${CONTAINER_PORTS}
+
+    sleep 3
+
+    # Deploy Nginx
+    echo -e "Deploying Nginx...\n"
+    nohup podman run -dt --pod "${POD_NAME}" ${NGINX_VOLUME_MOUNTS} -e "NGINX_PORT=8080" --name "${POD_NAME}-nginx" $NGINX_CONTAINER_IMAGE
+
+    sleep 3
+
+    # Deploy HAProxy
+    echo -e "Deploying HAProxy...\n"
+    nohup podman run -dt --sysctl net.ipv4.ip_unprivileged_port_start=0 --pod "${POD_NAME}" ${HAPROXY_VOLUME_MOUNTS} --name "${POD_NAME}-haproxy" $HAPROXY_CONTAINER_IMAGE
+
+    ;;
+
+esac

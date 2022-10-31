@@ -1,0 +1,59 @@
+---
+
+- name: Create CaaS Directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+  with_items:
+    - "{{ service_containers_dir }}/{{ service.name }}/"
+    - "{{ service_containers_dir }}/{{ service.name }}/certs"
+    - "{{ service_containers_dir }}/{{ service.name }}/haproxy"
+    - "{{ service_containers_dir }}/{{ service.name }}/scripts"
+    - "{{ service_containers_dir }}/{{ service.name }}/letsencrypt"
+    - "{{ service_containers_dir }}/{{ service.name }}/nginx"
+    - "{{ service_containers_dir }}/{{ service.name }}/nginx-templates"
+    - "{{ service_containers_dir }}/{{ service.name }}/webroot"
+
+- name: Copy CaaS script files
+  ansible.builtin.copy:
+    src: "files/{{ file_template_file }}"
+    dest: "{{ service_containers_dir }}/{{ service.name }}/scripts/{{ file_template_file }}"
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+  - create-cert.sh
+  - seed-cert.sh
+  loop_control:
+    loop_var: file_template_file
+
+- name: Copy nginx template
+  ansible.builtin.copy:
+    src: "files/default.conf.template"
+    dest: "{{ service_containers_dir }}/{{ service.name }}/nginx-templates/default.conf.template"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Template CaaS deployment files
+  ansible.builtin.template:
+    src: "{{ script_template_file }}.j2"
+    dest: "{{ service_containers_dir }}/{{ service.name }}/scripts/{{ script_template_file }}"
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+  - servicectl.sh
+  - renew-cert.sh
+  loop_control:
+    loop_var: script_template_file
+
+- name: "Template CaaS deployment files - {{ service.name }}.service"
+  ansible.builtin.template:
+    src: service.j2
+    dest: "/etc/systemd/system/{{ service.name }}.service"
+    owner: root
+    group: root
+    mode: 0755
