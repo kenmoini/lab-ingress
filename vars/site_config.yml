@@ -1,0 +1,21 @@
+---
+# This defines the services living on the host
+site_config:
+  raza.kemo.labs:
+    install_packages: false
+    configure_firewalld: false
+    configure_selinux: false
+
+    services:
+    - name: ingress
+      network:
+        name: lanBridge
+        ip: 192.168.42.28
+        ports:
+        - 80/tcp
+        - 443/tcp
+        - 8080/tcp
+      resources:
+        limits:
+          cpu: 1
+          memory: 1Gi

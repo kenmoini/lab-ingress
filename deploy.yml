@@ -1,0 +1,85 @@
+---
+- name: Deploy the HAProxy Ingress Container-as-a-Service
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    # service_containers_dir: Where will the files for this service be stored
+    service_containers_dir: /opt/caas
+
+    haproxy_image: haproxy:latest
+    nginx_image: nginx:latest
+    certbot_image: docker.io/certbot/certbot:latest
+
+    container_images:
+    - "{{ haproxy_image }}"
+    - "{{ nginx_image }}"
+    - "{{ certbot_image }}"
+
+    install_packages: true
+    configure_firewalld: true
+    configure_selinux: true
+
+    default_ssl_options: alpn h2 ssl-min-ver TLSv1.2
+    default_email: notkemo@redhat.com
+
+  tasks:
+
+    - name: Read in the site config variables
+      include_vars:
+        file: vars/site_config.yml
+
+    - name: Ensure the needed packages are installed
+      when: site_config[inventory_hostname]['install_packages'] | default(install_packages)
+      package:
+        name: "{{ package_item }}"
+        state: latest
+      loop:
+      - podman
+      - firewalld
+      loop_control:
+        loop_var: package_item
+
+    - name: Start FirewallD
+      when: site_config[inventory_hostname]['configure_firewalld'] | default(configure_firewalld)
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Create Service Containers Directory
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+      with_items:
+        - "{{ service_containers_dir }}"
+
+    - name: Pre-pull the image
+      containers.podman.podman_image:
+        name: "{{ item }}"
+        pull: yes
+        force: yes
+      loop: "{{ container_images }}"
+      #shell: "podman pull {{ container_image }}"
+
+    - name: Run per-service configuration
+      include_tasks: tasks/per-service.yml
+      loop: "{{ site_config[inventory_hostname]['services'] }}"
+      loop_control:
+        loop_var: service
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start CaaS
+      ansible.builtin.service:
+        name: "{{ service.name }}"
+        state: restarted
+        enabled: yes
+      loop: "{{ site_config[inventory_hostname]['services'] }}"
+      loop_control:
+        pause: 10
+        loop_var: service

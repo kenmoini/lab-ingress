@@ -7,18 +7,24 @@ set -x
 ###################################################################################
 
 POD_NAME="{{ service.name }}"
-NETWORK_NAME="{{ service.network.name }}"
-{% if service.network.ip is defined %}
-IP_ADDRESS="--ip {{ service.network.ip }}"
+
+
+NETWORK="--network {{ service.network.name | default('host') }}"
+
+{% if service.network.ports | length > 0 %}
+CONTAINER_PORTS="-p {{ service.network.ports | join(' -p ') }}"
+NETWORK="${NETWORK} ${CONTAINER_PORTS}"
 {% endif %}
-{% if service.network.ports is defined %}
-CONTAINER_PORTS="{% for port in service.network.ports %}-p {{ port }} {% endfor %}"
+
+{% if service.network.ip is defined %}
+IP_ADDRESS="{{ service.network.ip }}"
+NETWORK="${NETWORK} --ip ${IP_ADDRESS}"
 {% endif %}
 
 RESOURCE_LIMITS="-m {{ service.resources.limits.memory | default('2048m') }}"
 
-HAPROXY_CONTAINER_IMAGE="{{ haproxy_image | default('1024m') }}"
-NGINX_CONTAINER_IMAGE="{{ nginx_image | default('1024m') }}"
+HAPROXY_CONTAINER_IMAGE="{{ haproxy_image | default('haproxy:latest') }}"
+NGINX_CONTAINER_IMAGE="{{ nginx_image | default('nginx:latest') }}"
 
 POD_VOLUME_ROOT="{{ service_containers_dir }}/${POD_NAME}"
 
@@ -68,11 +74,13 @@ case $1 in
 
     ## Check for seeded default certificate
     if [[ ! -f ${POD_VOLUME_ROOT}/certs/default.pem ]]; then
+      cd ${POD_VOLUME_ROOT}/certs
       sh ${POD_VOLUME_ROOT}/scripts/seed-cert.sh
+      cd -
     fi
 
-    echo "Starting pod services..."
-    podman pod create --name "${POD_NAME}" --network "${NETWORK_NAME}" "${IP_ADDRESS}" ${CONTAINER_PORTS}
+    echo "Creating pod..."
+    podman pod create --name "${POD_NAME}" ${NETWORK}
 
     sleep 3
 

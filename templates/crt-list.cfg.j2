@@ -1,0 +1,4 @@
+/usr/local/etc/certs/default.pem
+{% for server in haproxy.servers %}{% if server.skip_crt_list is not defined or not server.skip_crt_list %}
+/usr/local/etc/certs/{{ server.cert_name | default(server.uri) }}.pem [{{ server.ssl_options | default(default_ssl_options) }}] {{ server.uri }}
+{% endif %}{% endfor %}

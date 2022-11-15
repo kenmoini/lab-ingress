@@ -1,3 +1,6 @@
+##########################################################################
+# Global configuration
+##########################################################################
 global
   log stdout format raw local0
   daemon
@@ -6,9 +9,15 @@ global
   # For more information, see ciphers(1SSL).
   ssl-default-bind-ciphers kEECDH+aRSA+AES:kRSA+AES:+AES256:RC4-SHA:!kEDH:!LOW:!EXP:!MD5:!aNULL:!eNULL
 
+##########################################################################
+# DNS resolvers
+##########################################################################
 resolvers docker_resolver
   nameserver dns {{ haproxy.dns_resolver }}
 
+##########################################################################
+# default options
+##########################################################################
 defaults
   log     global
   mode    http
@@ -18,44 +27,77 @@ defaults
   timeout client 36000s
   timeout server 36000s
 
+##########################################################################
+# HTTP Frontend
+##########################################################################
 frontend http
   bind *:80
   mode http
 	
-	# if this is an ACME request to proof the domain ownder, then redirect to nginx-certbot server
+  # if this is an ACME request to proof the domain ownder, then redirect to nginx-certbot server
   acl is_well_known path_beg -i /.well-known/
 	
-	# else redirect the traffic to https
+  # else redirect the traffic to https
   redirect scheme https code 301 if !is_well_known !{ ssl_fc }
   use_backend letsencrypt if is_well_known
 
+##########################################################################
+# Let's Encrypt http backend, just the other container in the Pod
+##########################################################################
 backend letsencrypt
   server letsencrypt {{ haproxy.lb_vip }}:8080 check init-addr none
 
+##########################################################################
+# SSL frontend
+##########################################################################
 frontend https
   bind *:443 ssl crt-list /usr/local/etc/haproxy/crt-list.cfg
   option forwardfor
 
+  # Common headers for reverse proxy configs when using SSL
+  http-request add-header X-Forwarded-Proto https if { ssl_fc }
+  http-request add-header X-Forwarded-Port 443 if { ssl_fc }
+  http-response set-header Strict-Transport-Security "max-age=16000000; includeSubDomains; preload;"
+
+  # Additional ACL definitions
 {% for acl in haproxy.acls %}
   acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
 {% endfor %}
 
 {% for server in haproxy.servers %}
+{% set skipacl = server.skip_acl | default('false') %}
+{% set skipbackend = server.skip_backend | default('false') %}
+{% if not skipacl|bool %}
   acl host_{{ server.name }} hdr(host) -i {{ server.uri }}
+{% endif %}
+{% if not skipbackend|bool %}
   use_backend {{ server.name }} if host_{{ server.name }}{% if server.extra_use_condition is defined %} {{ server.extra_use_condition }}{% endif %}
+{% endif %}
+
+
 {% endfor %}
 
-  http-request add-header X-Forwarded-Proto https if { ssl_fc }
-  http-request add-header X-Forwarded-Port 443 if { ssl_fc }
-  http-response set-header Strict-Transport-Security "max-age=16000000; includeSubDomains; preload;"
+  # Additional backends for this frontend
+{% for ub in haproxy.frontend_https.use_backends %}
+  use_backend {{ ub.name }} if {{ ub.acl }}
+{% endfor %}
 
+##########################################################################
+# Backend
+##########################################################################
 {% for server in haproxy.servers %}
 backend {{ server.name }}
   server {{ server.name }} {{ server.backend_target }}{% if server.extra_backend_server_args is defined %} {{ server.extra_backend_server_args }}{% endif %}
+
+{% if server.extra_backend_options is defined %}
 {% for option in server.extra_backend_options %}
   option {{ option }}
 {% endfor %}
-{% for config in server.extra_backend_config %}
+{% endif %}
+
+{% if server.extra_backend_config is defined %}{% for config in server.extra_backend_config %}
   {{ config }}
 {% endfor %}
+{% endif %}
+
 {% endfor %}

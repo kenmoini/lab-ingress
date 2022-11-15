@@ -1,5 +1,9 @@
 ---
 
+- name: Read in the service site config variables
+  include_vars:
+    file: site_configs/{{ inventory_hostname }}/{{ service.name }}/config.yml
+
 - name: Create CaaS Directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -57,3 +61,28 @@
     owner: root
     group: root
     mode: 0755
+
+- name: "Template HAProxy config"
+  ansible.builtin.template:
+    src: "{{ script_template_file }}.j2"
+    dest: "{{ service_containers_dir }}/{{ service.name }}/haproxy/{{ script_template_file }}"
+    owner: root
+    group: root
+    mode: 0644
+  loop:
+  - haproxy.cfg
+  - crt-list.cfg
+  loop_control:
+    loop_var: script_template_file
+
+- name: Create the default SSL certificate
+  ansible.builtin.command: "{{ service_containers_dir }}/{{ service.name }}/scripts/seed-cert.sh"
+  args:
+    chdir: "{{ service_containers_dir }}/{{ service.name }}/certs/"
+    creates: "{{ service_containers_dir }}/{{ service.name }}/certs/default.pem"
+
+#- name: Seed the Let's Encrypt certificates
+#  include_tasks: tasks/seed_letsencrypt.yml
+#  loop: "{{ haproxy.letsencrypt.certificates }}"
+#  loop_control:
+#    loop_var: cert
