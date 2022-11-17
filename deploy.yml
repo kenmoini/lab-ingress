@@ -83,3 +83,9 @@
       loop_control:
         pause: 10
         loop_var: service
+
+    - name: Start second round loops
+      include_tasks: tasks/per-service-second.yml
+      loop: "{{ site_config[inventory_hostname]['services'] }}"
+      loop_control:
+        loop_var: service

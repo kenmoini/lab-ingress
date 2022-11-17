@@ -62,6 +62,26 @@
     group: root
     mode: 0755
 
+- name: Check to see if the certificate exists in the expected location
+  ansible.builtin.stat:
+    path: "{{ service_containers_dir }}/{{ service.name }}/letsencrypt/live/{{ cert.name }}/cert.pem"
+  register: cert_exists
+  loop: "{{ certbot.certificates }}"
+  loop_control:
+    loop_var: cert
+
+#- name: d
+#  debug:
+#    msg: "{{ cert_exists }}"
+
+- name: Add the certificate to the bootstrap_certbot variable if it does not exist
+  set_fact:
+    bootstrap_certbot: "{{ bootstrap_certbot | default([]) + [cert.cert.name] }}"
+  loop: "{{ cert_exists.results }}"
+  loop_control:
+    loop_var: cert
+  when: cert.stat.exists == False
+
 - name: "Template HAProxy config"
   ansible.builtin.template:
     src: "{{ script_template_file }}.j2"
@@ -83,6 +103,25 @@
 
 #- name: Seed the Let's Encrypt certificates
 #  include_tasks: tasks/seed_letsencrypt.yml
-#  loop: "{{ haproxy.letsencrypt.certificates }}"
+#  loop: "{{ cerbot.certificates }}"
 #  loop_control:
 #    loop_var: cert
+
+# - Loop through the certbot.certificates and:
+#   - Check to see if the live certificate exists
+#   - If it does NOT exist, add the certificate entry into a bootstrap_certbot variable
+# - Template the crt-list.cfg file skipping the entries in the bootstrap_certbot variable
+# - Start the service
+# - Wait for the service to start (wait for 404 response at .well-known)
+# - Run the create-cert.sh script for each certificate in the bootstrap_certbot variable
+# - Check to see if the certificates were created, if not then repeat the last step - if they were created then add it to a created_certbot variable
+# - Template the crt-list.cfg file again, difference()'ing the two variables
+# - Restart the service
+
+#- name: d
+#  debug:
+#    msg: "{{ bootstrap_certbot }}"
+#
+#- name: f
+#  fail:
+#    msg: fail

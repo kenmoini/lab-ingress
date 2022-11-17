@@ -1,9 +1,16 @@
+---
+certbot:
+  email: ken@kenmoini.com
+  certificates:
+    - name: kemo.network
+      extra_sans:
+      - www.kemo.network
+    - name: lab.kemo.network
+    - name: cloud.kemo.network
+    - name: tower.kemo.network
+    #- name: no.kemo.labs
+
 haproxy:
-  letsencrypt:
-    email: ken@kenmoini.com
-    certificates:
-      - cloud.kemo.network
-      - tower.kemo.network
 
   dns_resolver: 192.168.42.9:53
   lb_vip: 192.168.42.28
@@ -25,7 +32,6 @@ haproxy:
     extra_backend_config:
       - acl url_discovery path /.well-known/caldav /.well-known/carddav
       - http-request redirect location /remote.php/dav/ code 301 if url_discovery
-    #skip_crt_list: true
 
   - name: tower
     backend_target: 192.168.42.41:443
@@ -33,7 +39,6 @@ haproxy:
     extra_backend_options:
       - http-server-close
     uri: tower.kemo.network
-    #skip_crt_list: true
 
   - name: bazarr
     backend_target: 192.168.42.20:6767
