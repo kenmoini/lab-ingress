@@ -57,6 +57,7 @@ frontend https
   # Common headers for reverse proxy configs when using SSL
   http-request add-header X-Forwarded-Proto https if { ssl_fc }
   http-request add-header X-Forwarded-Port 443 if { ssl_fc }
+  http-response set-header X-Frame-Options SAMEORIGIN
   http-response set-header Strict-Transport-Security "max-age=16000000; includeSubDomains; preload;"
 
   # Additional ACL definitions
