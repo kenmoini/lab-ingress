@@ -90,6 +90,11 @@ haproxy:
     uri: sso.kemo.labs
     cert_name: wildcard.kemo.labs
 
+  - name: dashy
+    backend_target: 192.168.42.32:80
+    uri: dashy.kemo.labs
+    cert_name: wildcard.kemo.labs
+
   - name: wwwwebsvcs
     backend_target: 192.168.42.29:80
     uri: kemo.labs
