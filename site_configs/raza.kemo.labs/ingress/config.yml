@@ -40,6 +40,16 @@ haproxy:
       - http-server-close
     uri: tower.kemo.network
 
+  - name: pihole-1
+    backend_target: 192.168.42.11:80
+    uri: pihole-1.kemo.labs
+    cert_name: wildcard.kemo.labs
+
+  - name: pihole-2
+    backend_target: 192.168.42.12:80
+    uri: pihole-2.kemo.labs
+    cert_name: wildcard.kemo.labs
+
   - name: bazarr
     backend_target: 192.168.42.20:6767
     uri: bazarr.kemo.labs
