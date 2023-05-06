@@ -8,6 +8,7 @@ certbot:
     - name: lab.kemo.network
     - name: cloud.kemo.network
     - name: tower.kemo.network
+    - name: gitlab.lab.kemo.network
     #- name: no.kemo.labs
 
 haproxy:
@@ -32,6 +33,13 @@ haproxy:
     extra_backend_config:
       - acl url_discovery path /.well-known/caldav /.well-known/carddav
       - http-request redirect location /remote.php/dav/ code 301 if url_discovery
+
+  - name: gitlab
+    backend_target: 192.168.42.51:80
+    #extra_backend_server_args: ssl verify none
+    extra_backend_options:
+      - http-server-close
+    uri: gitlab.lab.kemo.network
 
   - name: tower
     backend_target: 192.168.42.41:443
