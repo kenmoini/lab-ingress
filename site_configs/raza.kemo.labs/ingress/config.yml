@@ -58,6 +58,11 @@ haproxy:
     uri: pihole-2.kemo.labs
     cert_name: wildcard.kemo.labs
 
+  - name: sabnzbd
+    backend_target: 192.168.42.24:8111
+    uri: sabnzbd.kemo.labs
+    cert_name: wildcard.kemo.labs
+
   - name: bazarr
     backend_target: 192.168.42.20:6767
     uri: bazarr.kemo.labs
